@@ -42,6 +42,12 @@ distributes under **LGPL-2.1-or-later**. This branch keeps that licence.
     fastsync for events and semaphores, pull request #16); `d770df01ae7`
     (ntdll ARM64EC: opt-in guard against a self-deadlock in the loader's
     image-map notification, pull request #17).
+  - Author spitefulowl, merged on 2026-10-04: `38aa753f98b` (ntdll ARM64EC:
+    leave the syscall callback on the execute-request early return, pull
+    request #22); `f2f3e4b42e4` (kernelbase iOS: GetTickCount and
+    QueryInterruptTime from the performance counter, pull request #23);
+    `f4bbccf9499` (ntdll ARM64EC: unwind data for x64 code running at a fixed
+    base below 4 GB, pull request #24).
 
 The LGPL permits combining this library with proprietary components (such
 as Apple's Metal Shader Converter) subject to LGPL-2.1 section 6; see the
