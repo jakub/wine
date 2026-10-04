@@ -48,6 +48,11 @@ distributes under **LGPL-2.1-or-later**. This branch keeps that licence.
     QueryInterruptTime from the performance counter, pull request #23);
     `f4bbccf9499` (ntdll ARM64EC: unwind data for x64 code running at a fixed
     base below 4 GB, pull request #24).
+  - Author meshoklv, merged on 2026-10-05: `30efeaa807b` (ntdll: load the
+    builtin XInput even when the game ships its own copy, pull request #19).
+    Pull request #18 (`b7996f867cb`, ntdll ARM64EC: leave the syscall callback
+    on the execute-request early return) is the same fix as `38aa753f98b`
+    above and came first; it is recorded as merged with no change of its own.
 
 The LGPL permits combining this library with proprietary components (such
 as Apple's Metal Shader Converter) subject to LGPL-2.1 section 6; see the
