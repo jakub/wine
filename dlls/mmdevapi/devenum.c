@@ -619,8 +619,12 @@ HRESULT load_devices_from_reg(void)
         }
         if (ret != ERROR_SUCCESS)
             continue;
+        /* The interface friendly name holds the driver's own device name;
+         * DEVPKEY_Device_FriendlyName is "Speakers (<name>)", and passing it
+         * back in nested another "Speakers (...)" around a device that is no
+         * longer present on every load. */
         if (SUCCEEDED(CLSIDFromString(guidvalue, &guid))
-            && SUCCEEDED(MMDevice_GetPropValue(&guid, curflow, (const PROPERTYKEY*)&DEVPKEY_Device_FriendlyName, &pv))
+            && SUCCEEDED(MMDevice_GetPropValue(&guid, curflow, (const PROPERTYKEY*)&DEVPKEY_DeviceInterface_FriendlyName, &pv))
             && pv.vt == VT_LPWSTR)
         {
             MMDevice_Create(pv.pwszVal, &guid, curflow,
