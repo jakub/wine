@@ -635,6 +635,12 @@ static void valgrind_notify_free_all( SUBHEAP *subheap, const struct heap *heap 
 }
 
 /* get the memory protection type to use for a given heap */
+#ifdef __arm64ec__
+/* Madeira-private NtAllocateVirtualMemoryEx attribute: "this reservation is an
+ * executable heap's own memory". Not a Windows flag; must match virtual_ios.c. */
+#define MADEIRA_MEM_EXTENDED_PARAMETER_HEAP 0x40000000
+#endif
+
 static inline ULONG get_protection_type( DWORD flags )
 {
     return (flags & HEAP_CREATE_ENABLE_EXECUTE) ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
@@ -1073,8 +1079,27 @@ static void *allocate_region( struct heap *heap, ULONG flags, SIZE_T *region_siz
 #endif
 
     /* allocate the memory block */
-    if ((status = NtAllocateVirtualMemory( NtCurrentProcess(), &addr, 0, region_size, MEM_RESERVE,
-                                           get_protection_type( flags ) )))
+#ifdef __arm64ec__
+    /* iOS-Madeira: an executable heap's reservation is PAGE_EXECUTE_READWRITE and
+     * grows in HEAP_INITIAL_GROW_SIZE (1 MB) steps, which the host allocator's
+     * size rule takes for a JIT code chunk and backs with a R+X JIT-pool slot. Its
+     * own metadata updates (the LFH InterlockedAnd on group->free_bits) are then
+     * LL/SC loops that can never complete under store emulation. Tag the
+     * reservation so the host treats the heap as data (ios_guest_anon_rwx_view_ok,
+     * virtual_ios.c); only the reservation is tagged, commits inherit it. */
+    if (flags & HEAP_CREATE_ENABLE_EXECUTE)
+    {
+        MEM_EXTENDED_PARAMETER param = {{ 0 }};
+        param.Type = MemExtendedParameterAttributeFlags;
+        param.ULong64 = MADEIRA_MEM_EXTENDED_PARAMETER_HEAP;
+        status = NtAllocateVirtualMemoryEx( NtCurrentProcess(), &addr, region_size, MEM_RESERVE,
+                                            get_protection_type( flags ), &param, 1 );
+    }
+    else
+#endif
+    status = NtAllocateVirtualMemory( NtCurrentProcess(), &addr, 0, region_size, MEM_RESERVE,
+                                      get_protection_type( flags ) );
+    if (status)
     {
         WARN( "Could not allocate %#Ix bytes, status %#lx\n", *region_size, status );
         return NULL;
