@@ -992,9 +992,10 @@ static void set_thread_info( struct thread *thread,
  * Managed runtimes' stop-the-world collectors suspend, read and resume their
  * threads on every collection, so the context has to follow the thread:
  *
- *  - every stop_thread() on a suspended thread re-captures a snapshot context
- *    (never one the thread filled in for itself, and never one that holds a
- *    pending SetThreadContext), for 64-bit and WoW64 processes alike.
+ *  - every stop_thread() that finds a context already cached (a SuspendThread,
+ *    a process suspend, or a GetThreadContext) re-captures the snapshot (never
+ *    one the thread filled in for itself, and never one pinned by a pending
+ *    SetThreadContext), for 64-bit and WoW64 processes alike.
  *    MADEIRA_CTX_REFRESH=0 keeps the first snapshot.
  *    A stale snapshot is not harmless for 64-bit processes: with the syscall
  *    frame substituted (MADEIRA_CTX_FRAME, mach_ios.c) its sp lies inside the
@@ -1042,9 +1043,10 @@ static int ios_wow_ctx_set_on( struct thread *thread )
     return ios_process_is_wow64( thread->process ) && ios_ctx_switch( &ctx_set, "MADEIRA_CTX_SET" );
 }
 
-/* A SetThreadContext keeps the cached context the caller read (no re-capture, and
- * no refresh until resume): always for 64-bit processes, which only cache it, and
- * for WoW64 ones while apply-on-resume is on. */
+/* A SetThreadContext is applied to the cached context the caller read, without a
+ * re-capture first: always for 64-bit processes, which only cache it, and for WoW64
+ * ones while apply-on-resume is on.  Whether it also pins that context against
+ * refresh until resume is decided in set_thread_context. */
 static int ios_ctx_set_pins( struct thread *thread )
 {
     return ios_process_is_wow64( thread->process ) ? ios_wow_ctx_set_on( thread ) : 1;
@@ -2481,6 +2483,10 @@ DECL_HANDLER(select)
         signal_sync( ctx->sync );
 #ifdef WINE_IOS
         current->ios_start_pending = 0;   /* it posted its start context */
+        /* The thread filled this context in itself: it is handed back to the thread on
+         * wakeup and must never be replaced by a Mach snapshot of the parked thread. */
+        ctx->ios_snapshot = 0;
+        ctx->ios_dirty    = 0;
 #endif
     }
 
@@ -2850,10 +2856,13 @@ DECL_HANDLER(set_thread_context)
             /* A context the thread filled in for itself (it is parked in
              * wait_suspend()) is applied by the thread on resume, as upstream.
              * A Mach snapshot is applied (WoW64) or released (64-bit) by
-             * resume_thread().  Only a suspended thread is ever resumed, so a
-             * Set on a running one must not pin the snapshot. */
+             * resume_thread(), the only place a pin is cleared.  So a 64-bit
+             * Set pins only under a thread-level suspend: under a process-level
+             * one alone (suspend_process) or on a running thread nothing would
+             * ever release it, and the snapshot would go stale again. */
             if (thread != current && ios_ctx_set_pins( thread ) && thread->context->ios_snapshot &&
-                is_thread_suspended( thread ))
+                (ios_process_is_wow64( thread->process ) ? is_thread_suspended( thread )
+                                                         : thread->suspend > 0))
                 thread->context->ios_dirty = 1;
 #endif
         }
